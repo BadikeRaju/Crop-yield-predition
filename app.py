@@ -1,4 +1,3 @@
-from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template, request, redirect, url_for, session
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -64,32 +63,52 @@ def index():
 
 @app.route('/recommend', methods=['POST'])
 def recommend():
-    # Extract form data
-    district = request.form['district']
-    soil_color = request.form['soil_color']
-    nitrogen = request.form['nitrogen']
-    phosphorus = request.form['phosphorus']
-    potassium = request.form['potassium']
-    ph = request.form['ph']
-    rainfall = request.form['rainfall']
-    temperature = request.form['temperature']
+    try:
+        # Extract form data
+        district = request.form['district']
+        soil_color = request.form['soil_color']
+        nitrogen = request.form['nitrogen']
+        phosphorus = request.form['phosphorus']
+        potassium = request.form['potassium']
+        ph = request.form['ph']
+        rainfall = request.form['rainfall']
+        temperature = request.form['temperature']
 
-    # Example processing
-    input_data = pd.DataFrame(
-        [[nitrogen, phosphorus, potassium, ph, rainfall, temperature, district, soil_color]],
-        columns=['Nitrogen', 'Phosphorus', 'Potassium', 'pH', 'Rainfall', 'Temperature', 'District_Name', 'Soil_color']
-    )
-    input_data_encoded = encoder.transform(input_data[['District_Name', 'Soil_color']])
-    predicted_crop = model_crop.predict(input_data_encoded)[0]
-    recommended_fertilizer = dataset[dataset['Crop'] == predicted_crop]['Fertilizer'].values[0]
-    link = dataset[(dataset['Crop'] == predicted_crop) & (dataset['Fertilizer'] == recommended_fertilizer)]['Link'].values[0]
+        # Validate that user didn't select "Select" option
+        if district == 'Select' or soil_color == 'Select' or nitrogen == 'Select' or \
+           phosphorus == 'Select' or potassium == 'Select' or ph == 'Select' or \
+           rainfall == 'Select' or temperature == 'Select':
+            return redirect(url_for('index'))
 
-    session['results'] = {
-        'predicted_crop': predicted_crop,
-        'recommended_fertilizer': recommended_fertilizer,
-        'link': link # Store only the YouTube ID
-    }
-    return redirect(url_for('results'))   
+        # Example processing
+        input_data = pd.DataFrame(
+            [[nitrogen, phosphorus, potassium, ph, rainfall, temperature, district, soil_color]],
+            columns=['Nitrogen', 'Phosphorus', 'Potassium', 'pH', 'Rainfall', 'Temperature', 'District_Name', 'Soil_color']
+        )
+        input_data_encoded = encoder.transform(input_data[['District_Name', 'Soil_color']])
+        predicted_crop = model_crop.predict(input_data_encoded)[0]
+        
+        # Get fertilizer and link with error handling
+        crop_data = dataset[dataset['Crop'] == predicted_crop]
+        if len(crop_data) == 0:
+            return redirect(url_for('index'))
+        
+        recommended_fertilizer = crop_data['Fertilizer'].values[0]
+        link_data = dataset[(dataset['Crop'] == predicted_crop) & (dataset['Fertilizer'] == recommended_fertilizer)]
+        if len(link_data) == 0:
+            link = crop_data['Link'].values[0] if len(crop_data['Link'].values) > 0 else ''
+        else:
+            link = link_data['Link'].values[0]
+
+        session['results'] = {
+            'predicted_crop': predicted_crop,
+            'recommended_fertilizer': recommended_fertilizer,
+            'link': link
+        }
+        return redirect(url_for('results'))
+    except Exception as e:
+        print(f"Error in recommend: {e}")
+        return redirect(url_for('index'))   
 
 
 @app.route('/results')
@@ -99,4 +118,4 @@ def results():
     return render_template('results.html', results=results)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
